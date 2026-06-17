@@ -1,0 +1,50 @@
+name: Release
+
+# Build self-contained, ready-to-run bundles for Windows, macOS and Linux and
+# attach them to a GitHub Release. Each bundle includes a Node runtime and
+# node_modules, so end users just unzip and run a launcher (no install).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Install production dependencies that get bundled into the release.
+      - run: npm ci --omit=dev
+      # Build the platform-specific bundle (downloads the matching Node runtime).
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.os }}
+          path: |
+            dist/GraphQLMesh-*.zip
+            dist/GraphQLMesh-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/GraphQLMesh-*

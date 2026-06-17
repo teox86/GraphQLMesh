@@ -87,8 +87,9 @@ app.get('/api/mesh/schema', async (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const server = app.listen(PORT, () => {
+  const url = `http://localhost:${PORT}`;
   // eslint-disable-next-line no-console
-  console.log(`GraphQL Mesh K8s Explorer listening on http://localhost:${PORT}`);
+  console.log(`GraphQL Mesh K8s Explorer listening on ${url}`);
   const ctx = k8s.context();
   if (ctx.connected) {
     // eslint-disable-next-line no-console
@@ -97,7 +98,26 @@ const server = app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.warn(`No kubeconfig loaded: ${ctx.error}`);
   }
+  if (process.env.NO_OPEN !== '1') openBrowser(url);
 });
+
+// Open the default browser at startup (best-effort, never fatal).
+function openBrowser(url) {
+  const { spawn } = require('child_process');
+  try {
+    const cmd =
+      process.platform === 'win32'
+        ? { command: 'cmd', args: ['/c', 'start', '""', url] }
+        : process.platform === 'darwin'
+        ? { command: 'open', args: [url] }
+        : { command: 'xdg-open', args: [url] };
+    const child = spawn(cmd.command, cmd.args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {});
+    child.unref();
+  } catch (_) {
+    /* ignore — the URL is printed above */
+  }
+}
 
 async function shutdown() {
   // eslint-disable-next-line no-console
