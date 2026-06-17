@@ -112,6 +112,13 @@ When you click **Add selected to Mesh**, for each selected API the server:
 3. (Re)starts the GraphQL Mesh CLI (`mesh dev`) which serves the unified
    GraphQL API + GraphiQL on `MESH_PORT`.
 
+### Per-service port-forwarding
+
+Each row in the table has a **Port-forward** button that opens a kubectl-free
+tunnel (`127.0.0.1:<random>`) to the service behind that API and shows the
+local URL; clicking it again tears the tunnel down. This is independent of the
+mesh and handy for poking an endpoint directly.
+
 ### 3. Schema download
 
 **Download schema (SDL)** introspects the live mesh and returns the unified
@@ -123,6 +130,9 @@ schema as `mesh-schema.graphql`.
 | -------- | ------------------- | ----------------------------------------------- |
 | `GET`    | `/api/cluster`      | Current kube context + reachability.            |
 | `GET`    | `/api/apis`         | Discovered APIs (`?namespace=` to scope).       |
+| `GET`    | `/api/portforward`  | List active per-service port-forwards.          |
+| `POST`   | `/api/portforward`  | Start a forward for `{ api }`; returns local URL.|
+| `DELETE` | `/api/portforward`  | Stop a forward for `{ id }`.                     |
 | `POST`   | `/api/mesh`         | Compose `{ selected: [...] }` into the mesh.    |
 | `GET`    | `/api/mesh`         | Mesh status, sources, and recent logs.          |
 | `DELETE` | `/api/mesh`         | Stop the mesh and tear down port-forwards.      |

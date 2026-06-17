@@ -37,6 +37,8 @@ class K8sClient {
     }
     // key `${namespace}/${pod}/${port}` -> { server, localPort }
     this.tunnels = new Map();
+    // user-initiated, per-API port-forwards: api.id -> { server, localPort, ... }
+    this.forwards = new Map();
   }
 
   context() {
@@ -198,6 +200,92 @@ class K8sClient {
     return `http://127.0.0.1:${localPort}${api.path}`;
   }
 
+  /**
+   * Start a user-initiated port-forward to the service backing an API.
+   * Idempotent per api.id. Returns a descriptor with the local port/URL.
+   */
+  async openForward(api) {
+    if (this.forwards.has(api.id)) return this.describeForward(api.id);
+
+    const { pod, service } = await this.podForService(api.namespace, api.name);
+    const svcPort =
+      (service.spec.ports || []).find((p) => p.port === api.servicePort) ||
+      (service.spec.ports || [])[0];
+    const containerPort = this.resolveContainerPort(pod, svcPort.targetPort, svcPort.port);
+    const podName = pod.metadata.name;
+
+    const server = net.createServer((socket) => {
+      this.forward
+        .portForward(api.namespace, podName, [containerPort], socket, null, socket)
+        .catch((err) => {
+          socket.destroy();
+          // eslint-disable-next-line no-console
+          console.error(`[port-forward] ${api.id} error:`, err.message);
+        });
+    });
+    server.on('error', (err) => {
+      // eslint-disable-next-line no-console
+      console.error(`[forward] ${api.id} server error:`, err.message);
+    });
+
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.removeListener('error', reject);
+        resolve();
+      });
+    });
+
+    const localPort = server.address().port;
+    this.forwards.set(api.id, {
+      server,
+      localPort,
+      namespace: api.namespace,
+      service: api.name,
+      podName,
+      servicePort: api.servicePort,
+      containerPort,
+      path: api.path || '',
+    });
+    return this.describeForward(api.id);
+  }
+
+  /** Tear down a user-initiated port-forward. Returns true if one existed. */
+  closeForward(id) {
+    const rec = this.forwards.get(id);
+    if (!rec) return false;
+    try {
+      rec.server.close();
+    } catch (_) {
+      /* ignore */
+    }
+    this.forwards.delete(id);
+    return true;
+  }
+
+  describeForward(id) {
+    const r = this.forwards.get(id);
+    if (!r) return null;
+    return {
+      id,
+      localPort: r.localPort,
+      localUrl: `http://localhost:${r.localPort}${r.path}`,
+      namespace: r.namespace,
+      service: r.service,
+      podName: r.podName,
+      servicePort: r.servicePort,
+      containerPort: r.containerPort,
+    };
+  }
+
+  listForwards() {
+    return [...this.forwards.keys()].map((id) => this.describeForward(id));
+  }
+
+  closeForwards() {
+    for (const id of [...this.forwards.keys()]) this.closeForward(id);
+  }
+
   closeTunnels() {
     for (const { server } of this.tunnels.values()) {
       try {
@@ -207,6 +295,7 @@ class K8sClient {
       }
     }
     this.tunnels.clear();
+    this.closeForwards();
   }
 }
 

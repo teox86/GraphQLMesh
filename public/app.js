@@ -3,6 +3,7 @@
 const state = {
   apis: [],
   selected: new Set(), // ids
+  forwards: new Map(), // id -> { localPort, localUrl }
   meshTimer: null,
 };
 
@@ -55,7 +56,7 @@ async function loadCluster() {
 async function loadApis() {
   const ns = $('#namespace').value.trim();
   const body = $('#api-body');
-  body.innerHTML = '<tr><td colspan="7" class="empty">Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
   try {
     const url = '/api/apis' + (ns ? `?namespace=${encodeURIComponent(ns)}` : '');
     const { apis } = await api('GET', url);
@@ -64,7 +65,7 @@ async function loadApis() {
     state.selected = new Set([...state.selected].filter((id) => apis.some((a) => a.id === id)));
     renderApis();
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="7" class="empty">⚠ ${escapeHtml(err.message)}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="empty">⚠ ${escapeHtml(err.message)}</td></tr>`;
     state.apis = [];
     renderApis();
   }
@@ -74,13 +75,13 @@ function renderApis() {
   const body = $('#api-body');
   if (state.apis.length === 0) {
     if (!body.querySelector('.empty')) {
-      body.innerHTML = '<tr><td colspan="7" class="empty">No exposed APIs detected.</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="empty">No exposed APIs detected.</td></tr>';
     }
   } else {
     body.innerHTML = state.apis
       .map((a) => {
         const checked = state.selected.has(a.id) ? 'checked' : '';
-        return `<tr data-id="${a.id}">
+        return `<tr data-id="${escapeHtml(a.id)}">
           <td class="col-check"><input type="checkbox" class="row-check" ${checked} /></td>
           <td><strong>${escapeHtml(a.name)}</strong></td>
           <td>${escapeHtml(a.namespace)}</td>
@@ -88,6 +89,7 @@ function renderApis() {
           <td>${a.servicePort}${a.portName ? ` <span class="summary">(${escapeHtml(a.portName)})</span>` : ''}</td>
           <td><input class="path-edit" value="${escapeHtml(a.path)}" /></td>
           <td><span class="tag ${a.source}">${a.source}</span></td>
+          <td class="col-pf">${renderForwardCell(a.id)}</td>
         </tr>`;
       })
       .join('');
@@ -198,6 +200,59 @@ async function stopMesh() {
   }
 }
 
+// ---- per-service port-forward --------------------------------------------
+
+function renderForwardCell(id) {
+  const f = state.forwards.get(id);
+  if (f) {
+    return `<button class="btn btn-pf-on pf-toggle" data-id="${escapeHtml(id)}">⛔ Disconnect</button>
+      <a class="pf-link" href="${escapeHtml(f.localUrl)}" target="_blank" rel="noopener" title="${escapeHtml(f.localUrl)}">localhost:${f.localPort}</a>`;
+  }
+  return `<button class="btn pf-toggle" data-id="${escapeHtml(id)}">🔌 Connect</button>`;
+}
+
+function updateForwardCell(id) {
+  const cell = document.querySelector(`tr[data-id="${CSS.escape(id)}"] .col-pf`);
+  if (cell) cell.innerHTML = renderForwardCell(id);
+}
+
+async function toggleForward(id, btn) {
+  const apiDesc = state.apis.find((a) => a.id === id);
+  if (!apiDesc) return;
+  const active = state.forwards.has(id);
+  btn.disabled = true;
+  btn.textContent = active ? 'Disconnecting…' : 'Connecting…';
+  try {
+    if (active) {
+      await api('DELETE', '/api/portforward', { id });
+      state.forwards.delete(id);
+      toast(`Port-forward closed for ${apiDesc.name}.`, 'success');
+    } else {
+      // honour any edited path on the row
+      const row = document.querySelector(`tr[data-id="${CSS.escape(id)}"] .path-edit`);
+      const path = row ? row.value.trim() || apiDesc.path : apiDesc.path;
+      const r = await api('POST', '/api/portforward', { api: { ...apiDesc, path } });
+      state.forwards.set(id, r.forward);
+      toast(`Forwarding ${apiDesc.name} → ${r.forward.localUrl}`, 'success');
+    }
+  } catch (err) {
+    toast(`Port-forward failed: ${err.message}`, 'error');
+  } finally {
+    updateForwardCell(id);
+  }
+}
+
+// Sync forward state from the server (survives page reloads / refreshes).
+async function loadForwards() {
+  try {
+    const { forwards } = await api('GET', '/api/portforward');
+    state.forwards = new Map(forwards.map((f) => [f.id, f]));
+    state.apis.forEach((a) => updateForwardCell(a.id));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 // ---- events ---------------------------------------------------------------
 
 $('#refresh').addEventListener('click', loadApis);
@@ -220,10 +275,16 @@ $('#api-body').addEventListener('change', (e) => {
   updateSummary();
 });
 
+$('#api-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('.pf-toggle');
+  if (!btn) return;
+  toggleForward(btn.dataset.id, btn);
+});
+
 // ---- init -----------------------------------------------------------------
 
 loadCluster();
-loadApis();
+loadApis().then(loadForwards);
 loadMesh();
 // Poll mesh status so logs/state stay live.
 setInterval(loadMesh, 3000);

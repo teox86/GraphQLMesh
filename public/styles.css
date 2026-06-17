@@ -111,6 +111,16 @@ td input.path-edit {
   border-radius: 6px; padding: 5px 8px; width: 160px; font-family: monospace; font-size: 12px;
 }
 
+.col-pf { white-space: nowrap; }
+.col-pf .btn { padding: 5px 10px; font-size: 12px; }
+.btn-pf-on { border-color: var(--green); color: var(--green); }
+.btn-pf-on:hover:not(:disabled) { background: rgba(46, 194, 126, .12); }
+.pf-link {
+  margin-left: 8px; font-family: ui-monospace, monospace; font-size: 12px;
+  color: var(--green); text-decoration: none;
+}
+.pf-link:hover { text-decoration: underline; }
+
 .status-pill { padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .status-stopped { background: var(--panel-2); color: var(--muted); }
 .status-starting { background: rgba(245, 166, 35, .15); color: var(--amber); }

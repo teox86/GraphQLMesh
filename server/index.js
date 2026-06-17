@@ -60,6 +60,33 @@ app.post('/api/mesh', async (req, res) => {
   }
 });
 
+// ---- Per-service port-forwarding -----------------------------------------
+
+// List active user-initiated port-forwards.
+app.get('/api/portforward', (req, res) => res.json({ forwards: k8s.listForwards() }));
+
+// Start a port-forward to the service backing an API. Body: { api: {...} }
+app.post('/api/portforward', async (req, res) => {
+  const apiDesc = req.body && req.body.api;
+  if (!apiDesc || !apiDesc.id) {
+    return res.status(400).json({ error: 'Missing api descriptor.' });
+  }
+  try {
+    const forward = await k8s.openForward(apiDesc);
+    res.json({ ok: true, forward });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stop a port-forward. Body: { id }
+app.delete('/api/portforward', (req, res) => {
+  const id = req.body && req.body.id;
+  if (!id) return res.status(400).json({ error: 'Missing id.' });
+  const stopped = k8s.closeForward(id);
+  res.json({ ok: stopped });
+});
+
 // Mesh status.
 app.get('/api/mesh', (req, res) => res.json(mesh.state()));
 
