@@ -20,7 +20,32 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const WORKSPACE = path.join(ROOT, '.mesh-workspace');
-const MESH_BIN = path.join(ROOT, 'node_modules', '.bin', 'mesh');
+
+// Resolve the GraphQL Mesh CLI's JavaScript entrypoint and run it with the
+// current Node binary. This avoids the platform-specific `node_modules/.bin`
+// shims (a POSIX `sh` script on Linux/macOS, `mesh.cmd`/`mesh.ps1` on Windows),
+// which cannot be spawned directly and cause `spawn ... ENOENT` on Windows.
+const MESH_CLI = resolveMeshCli();
+
+function resolveMeshCli() {
+  // Try the package's declared `bin`, then known entry locations.
+  const candidates = [];
+  try {
+    const pkgPath = require.resolve('@graphql-mesh/cli/package.json');
+    const pkg = require(pkgPath);
+    const pkgDir = path.dirname(pkgPath);
+    const bin = pkg.bin;
+    const binRel = typeof bin === 'string' ? bin : bin && (bin.mesh || Object.values(bin)[0]);
+    if (binRel) candidates.push(path.join(pkgDir, binRel));
+  } catch (_) {
+    /* fall through to explicit paths */
+  }
+  candidates.push(
+    path.join(ROOT, 'node_modules', '@graphql-mesh', 'cli', 'cjs', 'bin.js'),
+    path.join(ROOT, 'node_modules', '@graphql-mesh', 'cli', 'esm', 'bin.js')
+  );
+  return candidates.find((p) => fs.existsSync(p)) || null;
+}
 
 class MeshManager {
   constructor({ port = 4000 } = {}) {
@@ -46,7 +71,7 @@ class MeshManager {
       sources: this.sources,
       startedAt: this.startedAt,
       lastError: this.lastError,
-      meshInstalled: fs.existsSync(MESH_BIN),
+      meshInstalled: !!MESH_CLI && fs.existsSync(MESH_CLI),
       logs: this.logs.slice(-200),
     };
   }
@@ -102,7 +127,7 @@ class MeshManager {
     if (!sources || sources.length === 0) {
       throw new Error('No sources selected.');
     }
-    if (!fs.existsSync(MESH_BIN)) {
+    if (!MESH_CLI || !fs.existsSync(MESH_CLI)) {
       throw new Error(
         'GraphQL Mesh CLI is not installed. Run `npm install` in the project root.'
       );
@@ -123,7 +148,9 @@ class MeshManager {
       this.log(`Starting GraphQL Mesh on port ${this.port}...`);
 
       // `mesh dev` serves with live GraphiQL; resolves modules from root node_modules.
-      this.proc = spawn(MESH_BIN, ['dev', '--port', String(this.port)], {
+      // Run the CLI's JS entry with the current Node binary so this works
+      // identically on Windows, macOS and Linux (no .bin shim involved).
+      this.proc = spawn(process.execPath, [MESH_CLI, 'dev', '--port', String(this.port)], {
         cwd: WORKSPACE,
         env: { ...process.env, NODE_OPTIONS: '' },
       });
@@ -228,4 +255,4 @@ function sanitizeName(name) {
   return pascal || `Source_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-module.exports = { MeshManager, WORKSPACE, MESH_BIN };
+module.exports = { MeshManager, WORKSPACE, MESH_CLI };
