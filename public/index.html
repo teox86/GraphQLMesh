@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GraphQL Mesh · K8s API Explorer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">⬡</span>
+        <div>
+          <h1>K8s API Explorer</h1>
+          <p class="subtitle">Compose cluster REST &amp; GraphQL APIs into a local GraphQL Mesh</p>
+        </div>
+      </div>
+      <div id="cluster" class="cluster-pill" title="Cluster connection">
+        <span class="dot"></span><span id="cluster-text">connecting…</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Exposed APIs</h2>
+          <div class="actions">
+            <label class="filter">
+              Namespace
+              <input id="namespace" type="text" placeholder="(all)" />
+            </label>
+            <button id="refresh" class="btn">↻ Refresh</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="checkbox"><input type="checkbox" id="select-all" /> Select all</label>
+          <span id="summary" class="summary">No APIs loaded.</span>
+          <div class="spacer"></div>
+          <button id="add-to-mesh" class="btn btn-primary" disabled>＋ Add selected to Mesh</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="api-table">
+            <thead>
+              <tr>
+                <th class="col-check"></th>
+                <th>API</th>
+                <th>Namespace</th>
+                <th>Type</th>
+                <th>Port</th>
+                <th>Endpoint path</th>
+                <th>Detected by</th>
+              </tr>
+            </thead>
+            <tbody id="api-body">
+              <tr><td colspan="7" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Local GraphQL Mesh</h2>
+          <div class="actions">
+            <span id="mesh-status" class="status-pill status-stopped">stopped</span>
+            <a id="open-graphiql" class="btn" target="_blank" rel="noopener">⇱ Open GraphiQL</a>
+            <button id="download-schema" class="btn" disabled>⬇ Download schema (SDL)</button>
+            <button id="stop-mesh" class="btn btn-danger" disabled>■ Stop</button>
+          </div>
+        </div>
+        <div class="mesh-meta">
+          <div><strong>Endpoint:</strong> <code id="mesh-endpoint">—</code></div>
+          <div><strong>Sources:</strong> <span id="mesh-sources">—</span></div>
+        </div>
+        <pre id="mesh-logs" class="logs">Mesh log output will appear here.</pre>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
