@@ -78,11 +78,12 @@ classifies each as `graphql` or `rest`. Classification order:
 
 1. **Explicit annotations** (most reliable):
 
-   | Annotation              | Example         | Meaning                                  |
-   | ----------------------- | --------------- | ---------------------------------------- |
-   | `graphql-mesh.io/type`  | `graphql`       | `graphql` \| `rest`/`openapi` \| `ignore`|
-   | `graphql-mesh.io/path`  | `/graphql`      | Endpoint path (defaults per type).       |
-   | `graphql-mesh.io/port`  | `http`          | Port name or number to use.              |
+   | Annotation                    | Example                     | Meaning                                                                 |
+   | ----------------------------- | --------------------------- | ----------------------------------------------------------------------- |
+   | `graphql-mesh.io/type`        | `graphql`                   | `graphql` \| `rest`/`openapi` \| `ignore`                               |
+   | `graphql-mesh.io/path`        | `/graphql`                  | Endpoint / OpenAPI spec path. Defaults: `/graphql`, REST `/swagger/v1/swagger.json`. |
+   | `graphql-mesh.io/browse-path` | `/swagger`                  | Path opened by the port-forward link. Defaults: GraphQL = `path`, REST `/swagger`. |
+   | `graphql-mesh.io/port`        | `http`                      | Port name or number to use.                                             |
 
 2. **Heuristics** when no annotation is present: port/service/label names
    containing `graphql`/`gql` → GraphQL; `rest`/`openapi`/`swagger`/`api` or a

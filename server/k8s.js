@@ -14,12 +14,16 @@ const k8s = require('@kubernetes/client-node');
 // Annotation keys a service author can set to describe their API explicitly.
 const ANNO = {
   type: 'graphql-mesh.io/type', // "graphql" | "rest" | "openapi" | "ignore"
-  path: 'graphql-mesh.io/path', // endpoint path, e.g. /graphql or /openapi.json
+  path: 'graphql-mesh.io/path', // endpoint / spec path, e.g. /graphql or /swagger/v1/swagger.json
   port: 'graphql-mesh.io/port', // port name or number to use
+  browsePath: 'graphql-mesh.io/browse-path', // path opened by the port-forward link (e.g. /swagger)
 };
 
 const GRAPHQL_DEFAULT_PATH = '/graphql';
-const OPENAPI_DEFAULT_PATH = '/openapi.json';
+// REST services expose their OpenAPI document here (consumed by the mesh)...
+const OPENAPI_DEFAULT_PATH = '/swagger/v1/swagger.json';
+// ...while the human-facing Swagger UI lives here (opened by the forward link).
+const REST_BROWSE_PATH = '/swagger';
 
 class K8sClient {
   constructor() {
@@ -94,6 +98,11 @@ class K8sClient {
       const path =
         annotations[ANNO.path] ||
         (guessed === 'graphql' ? GRAPHQL_DEFAULT_PATH : OPENAPI_DEFAULT_PATH);
+      // The path opened when the user clicks the port-forward link. For REST
+      // this is the Swagger UI (/swagger), not the raw OpenAPI document.
+      const browsePath =
+        annotations[ANNO.browsePath] ||
+        (guessed === 'graphql' ? path : REST_BROWSE_PATH);
 
       apis.push({
         id: `${meta.namespace}/${meta.name}/${chosenPort.port}`,
@@ -104,6 +113,7 @@ class K8sClient {
         targetPort: chosenPort.targetPort,
         portName: chosenPort.name || null,
         path,
+        browsePath,
         source: explicitType ? 'annotation' : 'heuristic',
         clusterUrl: `http://${meta.name}.${meta.namespace}.svc.cluster.local:${chosenPort.port}${path}`,
         labels: meta.labels || {},
@@ -245,7 +255,8 @@ class K8sClient {
       podName,
       servicePort: api.servicePort,
       containerPort,
-      path: api.path || '',
+      // link target shown in the UI (Swagger UI for REST, /graphql for GraphQL)
+      browsePath: api.browsePath || api.path || '',
     });
     return this.describeForward(api.id);
   }
@@ -269,7 +280,7 @@ class K8sClient {
     return {
       id,
       localPort: r.localPort,
-      localUrl: `http://localhost:${r.localPort}${r.path}`,
+      localUrl: `http://localhost:${r.localPort}${r.browsePath}`,
       namespace: r.namespace,
       service: r.service,
       podName: r.podName,
