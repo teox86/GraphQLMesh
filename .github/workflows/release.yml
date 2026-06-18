@@ -92,7 +92,9 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.setup.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          # Anchor the tag to the real commit: the merge commit on main for PR
+          # merges, otherwise the pushed/dispatched commit.
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           name: ${{ needs.setup.outputs.tag }}
           generate_release_notes: true
           # Manual runs stay drafts; merges and tag pushes publish automatically.
