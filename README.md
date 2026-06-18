@@ -113,6 +113,13 @@ When you click **Add selected to Mesh**, for each selected API the server:
 3. (Re)starts the GraphQL Mesh CLI (`mesh dev`) which serves the unified
    GraphQL API + GraphiQL on `MESH_PORT`.
 
+### Browsing the table
+
+The API table sorts by clicking column headers and has a **live filter box in
+each column header** (results update as you type). The **Namespace** box scopes
+the cluster query itself and is also live. The top bar shows a **live count of
+open port-forward connections** with a **Disconnect all** button.
+
 ### Per-service port-forwarding
 
 Each row in the table has a **Port-forward** button that opens a kubectl-free

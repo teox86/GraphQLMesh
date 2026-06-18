@@ -4,7 +4,10 @@ const state = {
   apis: [],
   selected: new Set(), // ids
   forwards: new Map(), // id -> { localPort, localUrl }
+  sort: { key: 'namespace', dir: 1 }, // dir: 1 asc, -1 desc
+  filters: {}, // column key -> lowercase substring
   meshTimer: null,
+  nsTimer: null,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -71,14 +74,36 @@ async function loadApis() {
   }
 }
 
+// Field used for each filter/sort column.
+function fieldValue(a, key) {
+  if (key === 'servicePort') return String(a.servicePort);
+  return String(a[key] ?? '');
+}
+
+// Apply the live column filters, then sort.
+function getVisibleApis() {
+  const filters = Object.entries(state.filters).filter(([, v]) => v);
+  let list = state.apis.filter((a) =>
+    filters.every(([key, val]) => fieldValue(a, key).toLowerCase().includes(val))
+  );
+  const { key, dir } = state.sort;
+  list = list.slice().sort((a, b) => {
+    if (key === 'servicePort') return (a.servicePort - b.servicePort) * dir;
+    const cmp = fieldValue(a, key).localeCompare(fieldValue(b, key), undefined, { numeric: true });
+    // stable secondary sort by namespace then name for ties
+    return (cmp || a.namespace.localeCompare(b.namespace) || a.name.localeCompare(b.name)) * dir;
+  });
+  return list;
+}
+
 function renderApis() {
   const body = $('#api-body');
-  if (state.apis.length === 0) {
-    if (!body.querySelector('.empty')) {
-      body.innerHTML = '<tr><td colspan="8" class="empty">No exposed APIs detected.</td></tr>';
-    }
+  const visible = getVisibleApis();
+  if (visible.length === 0) {
+    const msg = state.apis.length === 0 ? 'No exposed APIs detected.' : 'No APIs match the filters.';
+    body.innerHTML = `<tr><td colspan="8" class="empty">${msg}</td></tr>`;
   } else {
-    body.innerHTML = state.apis
+    body.innerHTML = visible
       .map((a) => {
         const checked = state.selected.has(a.id) ? 'checked' : '';
         return `<tr data-id="${escapeHtml(a.id)}">
@@ -94,15 +119,25 @@ function renderApis() {
       })
       .join('');
   }
+  updateSortIndicators();
   updateSummary();
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('.head-titles th.sortable').forEach((th) => {
+    const arrow = th.querySelector('.arrow');
+    if (!arrow) return;
+    arrow.textContent = th.dataset.sort === state.sort.key ? (state.sort.dir === 1 ? '▲' : '▼') : '';
+  });
 }
 
 function updateSummary() {
   const n = state.selected.size;
-  $('#summary').textContent = `${state.apis.length} API(s) detected · ${n} selected`;
+  const visible = getVisibleApis();
+  const filtered = visible.length !== state.apis.length ? ` · ${visible.length} shown` : '';
+  $('#summary').textContent = `${state.apis.length} API(s) detected${filtered} · ${n} selected`;
   $('#add-to-mesh').disabled = n === 0;
-  const all = state.apis.length > 0 && n === state.apis.length;
-  $('#select-all').checked = all;
+  $('#select-all').checked = visible.length > 0 && visible.every((a) => state.selected.has(a.id));
 }
 
 function escapeHtml(s) {
@@ -239,7 +274,34 @@ async function toggleForward(id, btn) {
     toast(`Port-forward failed: ${err.message}`, 'error');
   } finally {
     updateForwardCell(id);
+    updateConnections();
   }
+}
+
+async function disconnectAll() {
+  const count = state.forwards.size;
+  if (count === 0) return;
+  const btn = $('#disconnect-all');
+  btn.disabled = true;
+  try {
+    await api('DELETE', '/api/portforward/all');
+    const ids = [...state.forwards.keys()];
+    state.forwards.clear();
+    ids.forEach((id) => updateForwardCell(id));
+    toast(`Closed ${count} connection(s).`, 'success');
+  } catch (err) {
+    toast(`Failed to disconnect all: ${err.message}`, 'error');
+  } finally {
+    updateConnections();
+  }
+}
+
+// Live counter of open port-forwards + enable/disable "Disconnect all".
+function updateConnections() {
+  const n = state.forwards.size;
+  $('#conn-count').textContent = String(n);
+  $('#conn-pill').classList.toggle('active', n > 0);
+  $('#disconnect-all').disabled = n === 0;
 }
 
 // Sync forward state from the server (survives page reloads / refreshes).
@@ -250,20 +312,47 @@ async function loadForwards() {
     state.apis.forEach((a) => updateForwardCell(a.id));
   } catch (_) {
     /* ignore */
+  } finally {
+    updateConnections();
   }
 }
 
 // ---- events ---------------------------------------------------------------
 
 $('#refresh').addEventListener('click', loadApis);
-$('#namespace').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadApis(); });
 $('#add-to-mesh').addEventListener('click', addToMesh);
 $('#download-schema').addEventListener('click', downloadSchema);
 $('#stop-mesh').addEventListener('click', stopMesh);
+$('#disconnect-all').addEventListener('click', disconnectAll);
+
+// Live namespace search (debounced server-side scope) — updates as you type.
+$('#namespace').addEventListener('input', () => {
+  clearTimeout(state.nsTimer);
+  state.nsTimer = setTimeout(() => loadApis().then(loadForwards), 300);
+});
+
+// Live per-column filters (client-side) — updates as you type.
+document.querySelectorAll('.head-filters input[data-filter]').forEach((input) => {
+  input.addEventListener('input', () => {
+    state.filters[input.dataset.filter] = input.value.trim().toLowerCase();
+    renderApis();
+  });
+});
+
+// Click a column header to sort (toggles asc/desc).
+document.querySelectorAll('.head-titles th.sortable').forEach((th) => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (state.sort.key === key) state.sort.dir *= -1;
+    else state.sort = { key, dir: 1 };
+    renderApis();
+  });
+});
 
 $('#select-all').addEventListener('change', (e) => {
-  if (e.target.checked) state.apis.forEach((a) => state.selected.add(a.id));
-  else state.selected.clear();
+  const visible = getVisibleApis();
+  if (e.target.checked) visible.forEach((a) => state.selected.add(a.id));
+  else visible.forEach((a) => state.selected.delete(a.id));
   renderApis();
 });
 
@@ -273,6 +362,14 @@ $('#api-body').addEventListener('change', (e) => {
   if (e.target.checked) state.selected.add(id);
   else state.selected.delete(id);
   updateSummary();
+});
+
+// Persist edited endpoint paths so they survive re-renders (sort/filter/refresh).
+$('#api-body').addEventListener('input', (e) => {
+  if (!e.target.classList.contains('path-edit')) return;
+  const id = e.target.closest('tr').dataset.id;
+  const apiDesc = state.apis.find((a) => a.id === id);
+  if (apiDesc) apiDesc.path = e.target.value;
 });
 
 $('#api-body').addEventListener('click', (e) => {

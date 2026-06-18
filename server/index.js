@@ -79,6 +79,12 @@ app.post('/api/portforward', async (req, res) => {
   }
 });
 
+// Stop all active port-forwards at once.
+app.delete('/api/portforward/all', (req, res) => {
+  k8s.closeForwards();
+  res.json({ ok: true });
+});
+
 // Stop a port-forward. Body: { id }
 app.delete('/api/portforward', (req, res) => {
   const id = req.body && req.body.id;
