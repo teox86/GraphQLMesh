@@ -1,19 +1,65 @@
 name: Release
 
-# Build self-contained, ready-to-run bundles for Windows, macOS and Linux and
-# attach them to a GitHub Release. Each bundle includes a Node runtime and
+# Builds self-contained, ready-to-run bundles for Windows, macOS and Linux and
+# attaches them to a GitHub Release. Each bundle includes a Node runtime and
 # node_modules, so end users just unzip and run a launcher (no install).
+#
+# Triggers:
+#   * a merged PR into main  -> auto-bumps the version and PUBLISHES a release
+#   * pushing a v* tag        -> publishes a release for that exact tag
+#   * manual run              -> builds bundles and creates a DRAFT release
+#
+# Version bump on PR merge: patch by default; add a `release:minor` or
+# `release:major` label to the PR to bump those instead. Closing a PR WITHOUT
+# merging does not create a release.
 
 on:
   push:
     tags: ['v*']
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  setup:
+    # Skip PRs that were closed without merging.
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need all tags to compute the next version
+      - id: version
+        name: Determine release tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push: use the tag as-is.
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            # Merge / manual: bump the latest v* tag.
+            latest="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
+            [ -z "$latest" ] && latest="v0.0.0"
+            ver="${latest#v}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$ver"
+            labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+            case ",$labels," in
+              *,release:major,*) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+              *,release:minor,*) MINOR=$((MINOR+1)); PATCH=0 ;;
+              *)                 PATCH=$((PATCH+1)) ;;
+            esac
+            echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
+          fi
+      - run: echo "Release tag will be ${{ steps.version.outputs.tag }}"
+
   build:
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
@@ -37,8 +83,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [setup, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -46,5 +91,10 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          tag_name: ${{ needs.setup.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.setup.outputs.tag }}
+          generate_release_notes: true
+          # Manual runs stay drafts; merges and tag pushes publish automatically.
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
           files: artifacts/**/GraphQLMesh-*
