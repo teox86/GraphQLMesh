@@ -95,10 +95,20 @@ class MeshManager {
           handler: { graphql: { endpoint: s.endpoint } },
         };
       }
-      // REST / OpenAPI
+      // REST / OpenAPI. `source` loads the spec through the port-forward;
+      // `endpoint` overrides the base URL so operations are sent back through
+      // the tunnel instead of the host declared in the spec's `servers` (which
+      // is often `/` or `http://localhost` -> ECONNREFUSED on :80).
+      const handler = { source: s.endpoint };
+      try {
+        const u = new URL(s.endpoint);
+        handler.endpoint = `${u.protocol}//${u.host}`;
+      } catch (_) {
+        /* non-absolute source: leave endpoint to the spec */
+      }
       return {
         name: handlerName,
-        handler: { openapi: { source: s.endpoint } },
+        handler: { openapi: handler },
       };
     });
 
