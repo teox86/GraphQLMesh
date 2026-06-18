@@ -92,8 +92,11 @@ class K8sClient {
       const chosenPort = pickPort(ports, annotations[ANNO.port]);
       if (!chosenPort) continue;
 
-      const guessed = explicitType || guessType(meta, chosenPort);
-      if (!guessed) continue; // not an obvious API surface
+      // Classify by annotation, then heuristics. Anything still unknown is
+      // shown as a REST candidate rather than hidden — never silently drop a
+      // service that exposes a port (the UI's column filters let you narrow).
+      const detected = explicitType || guessType(meta, chosenPort);
+      const guessed = detected || 'rest';
 
       const path =
         annotations[ANNO.path] ||
@@ -114,7 +117,7 @@ class K8sClient {
         portName: chosenPort.name || null,
         path,
         browsePath,
-        source: explicitType ? 'annotation' : 'heuristic',
+        source: explicitType ? 'annotation' : detected ? 'heuristic' : 'default',
         clusterUrl: `http://${meta.name}.${meta.namespace}.svc.cluster.local:${chosenPort.port}${path}`,
         labels: meta.labels || {},
       });
