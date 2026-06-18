@@ -60,6 +60,33 @@ app.post('/api/mesh', async (req, res) => {
   }
 });
 
+// ---- Per-service port-forwarding -----------------------------------------
+
+// List active user-initiated port-forwards.
+app.get('/api/portforward', (req, res) => res.json({ forwards: k8s.listForwards() }));
+
+// Start a port-forward to the service backing an API. Body: { api: {...} }
+app.post('/api/portforward', async (req, res) => {
+  const apiDesc = req.body && req.body.api;
+  if (!apiDesc || !apiDesc.id) {
+    return res.status(400).json({ error: 'Missing api descriptor.' });
+  }
+  try {
+    const forward = await k8s.openForward(apiDesc);
+    res.json({ ok: true, forward });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stop a port-forward. Body: { id }
+app.delete('/api/portforward', (req, res) => {
+  const id = req.body && req.body.id;
+  if (!id) return res.status(400).json({ error: 'Missing id.' });
+  const stopped = k8s.closeForward(id);
+  res.json({ ok: stopped });
+});
+
 // Mesh status.
 app.get('/api/mesh', (req, res) => res.json(mesh.state()));
 
@@ -87,8 +114,9 @@ app.get('/api/mesh/schema', async (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const server = app.listen(PORT, () => {
+  const url = `http://localhost:${PORT}`;
   // eslint-disable-next-line no-console
-  console.log(`GraphQL Mesh K8s Explorer listening on http://localhost:${PORT}`);
+  console.log(`GraphQL Mesh K8s Explorer listening on ${url}`);
   const ctx = k8s.context();
   if (ctx.connected) {
     // eslint-disable-next-line no-console
@@ -97,7 +125,26 @@ const server = app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.warn(`No kubeconfig loaded: ${ctx.error}`);
   }
+  if (process.env.NO_OPEN !== '1') openBrowser(url);
 });
+
+// Open the default browser at startup (best-effort, never fatal).
+function openBrowser(url) {
+  const { spawn } = require('child_process');
+  try {
+    const cmd =
+      process.platform === 'win32'
+        ? { command: 'cmd', args: ['/c', 'start', '""', url] }
+        : process.platform === 'darwin'
+        ? { command: 'open', args: [url] }
+        : { command: 'xdg-open', args: [url] };
+    const child = spawn(cmd.command, cmd.args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {});
+    child.unref();
+  } catch (_) {
+    /* ignore — the URL is printed above */
+  }
+}
 
 async function shutdown() {
   // eslint-disable-next-line no-console

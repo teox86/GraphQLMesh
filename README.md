@@ -26,6 +26,24 @@ provided by the official Kubernetes JavaScript client.
 
 ## Quick start
 
+### Option A — download a release (no install)
+
+Grab the bundle for your OS from the
+[Releases](https://github.com/teox86/GraphQLMesh/releases) page, unzip it, and
+run the launcher. It includes a Node runtime + dependencies, so **nothing needs
+to be installed** (no Node, npm, or Docker):
+
+| OS      | Run                                    |
+| ------- | -------------------------------------- |
+| Windows | double-click `run.cmd`                 |
+| macOS   | `./run.sh`                             |
+| Linux   | `./run.sh`                             |
+
+It opens <http://localhost:3000> automatically and uses your current
+kubeconfig. Set `PORT` to change the port; set `NO_OPEN=1` to skip auto-open.
+
+### Option B — from source
+
 ```bash
 npm install
 npm start
@@ -34,6 +52,14 @@ npm start
 
 Make sure a kubeconfig is active first (`kubectl config current-context`
 should print your cluster). The header pill shows the connected context.
+
+### Building release bundles
+
+`npm run package` produces a self-contained archive for the current OS in
+`dist/` (bundled Node runtime + `node_modules` + launchers). The
+[`Release` workflow](.github/workflows/release.yml) runs this on Windows, macOS
+and Linux for every `v*` tag and attaches the archives to a draft GitHub
+Release.
 
 ### Environment variables
 
@@ -86,6 +112,13 @@ When you click **Add selected to Mesh**, for each selected API the server:
 3. (Re)starts the GraphQL Mesh CLI (`mesh dev`) which serves the unified
    GraphQL API + GraphiQL on `MESH_PORT`.
 
+### Per-service port-forwarding
+
+Each row in the table has a **Port-forward** button that opens a kubectl-free
+tunnel (`127.0.0.1:<random>`) to the service behind that API and shows the
+local URL; clicking it again tears the tunnel down. This is independent of the
+mesh and handy for poking an endpoint directly.
+
 ### 3. Schema download
 
 **Download schema (SDL)** introspects the live mesh and returns the unified
@@ -97,6 +130,9 @@ schema as `mesh-schema.graphql`.
 | -------- | ------------------- | ----------------------------------------------- |
 | `GET`    | `/api/cluster`      | Current kube context + reachability.            |
 | `GET`    | `/api/apis`         | Discovered APIs (`?namespace=` to scope).       |
+| `GET`    | `/api/portforward`  | List active per-service port-forwards.          |
+| `POST`   | `/api/portforward`  | Start a forward for `{ api }`; returns local URL.|
+| `DELETE` | `/api/portforward`  | Stop a forward for `{ id }`.                     |
 | `POST`   | `/api/mesh`         | Compose `{ selected: [...] }` into the mesh.    |
 | `GET`    | `/api/mesh`         | Mesh status, sources, and recent logs.          |
 | `DELETE` | `/api/mesh`         | Stop the mesh and tear down port-forwards.      |
