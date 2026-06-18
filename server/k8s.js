@@ -92,8 +92,16 @@ class K8sClient {
       const chosenPort = pickPort(ports, annotations[ANNO.port]);
       if (!chosenPort) continue;
 
-      const guessed = explicitType || guessType(meta, chosenPort);
-      if (!guessed) continue; // not an obvious API surface
+      // Classify by annotation, then heuristics. For services that don't match
+      // a heuristic, only include them when they're plausibly HTTP APIs — the
+      // chosen port number looks like HTTP, or the name ends with "-api".
+      // Otherwise skip (avoids surfacing databases and other non-HTTP services).
+      const detected = explicitType || guessType(meta, chosenPort);
+      let guessed = detected;
+      if (!guessed && (isHttpPort(chosenPort.port) || /-api$/i.test(meta.name))) {
+        guessed = 'rest';
+      }
+      if (!guessed) continue; // not a plausible API surface
 
       const path =
         annotations[ANNO.path] ||
@@ -114,7 +122,7 @@ class K8sClient {
         portName: chosenPort.name || null,
         path,
         browsePath,
-        source: explicitType ? 'annotation' : 'heuristic',
+        source: explicitType ? 'annotation' : detected ? 'heuristic' : 'default',
         clusterUrl: `http://${meta.name}.${meta.namespace}.svc.cluster.local:${chosenPort.port}${path}`,
         labels: meta.labels || {},
       });
@@ -329,6 +337,12 @@ function pickPort(ports, preferred) {
   // Prefer a port whose name hints at an API; otherwise the first http-ish one.
   const byName = ports.find((p) => /graphql|http|rest|api|web/i.test(p.name || ''));
   return byName || ports[0];
+}
+
+// Common HTTP/REST port numbers used to include otherwise-unclassified services.
+const HTTP_PORTS = new Set([80, 443, 3000, 5000, 5001, 8000, 8080, 8081, 8443, 8888]);
+function isHttpPort(port) {
+  return HTTP_PORTS.has(Number(port));
 }
 
 /** Heuristic classification when no annotation is present. */

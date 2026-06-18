@@ -93,8 +93,12 @@ classifies each as `graphql` or `rest`. Classification order:
    | `graphql-mesh.io/port`        | `http`                      | Port name or number to use.                                             |
 
 2. **Heuristics** when no annotation is present: port/service/label names
-   containing `graphql`/`gql` → GraphQL; `rest`/`openapi`/`swagger`/`api` or a
-   plain `http` named port → REST candidate.
+   containing `graphql`/`gql` → GraphQL; `rest`/`openapi`/`swagger`/`api` (incl.
+   names ending in `-api`) or a plain `http`/`https`/`web` named port → REST.
+   Services with no naming hint are still listed as REST **if** their port
+   number looks like HTTP (80, 443, 3000, 5000, 5001, 8000, 8080, 8081, 8443,
+   8888) or the name ends with `-api`; other non-HTTP services (e.g. databases)
+   are skipped.
 
 Annotate a service to make it show up exactly as intended, e.g.:
 
