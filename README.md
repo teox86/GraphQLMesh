@@ -57,9 +57,16 @@ should print your cluster). The header pill shows the connected context.
 
 `npm run package` produces a self-contained archive for the current OS in
 `dist/` (bundled Node runtime + `node_modules` + launchers). The
-[`Release` workflow](.github/workflows/release.yml) runs this on Windows, macOS
-and Linux for every `v*` tag and attaches the archives to a draft GitHub
-Release.
+[`Release` workflow](.github/workflows/release.yml) builds these on Windows,
+macOS and Linux and attaches them to a GitHub Release. It runs when:
+
+- **a PR is merged into `main`** → auto-bumps the version and **publishes** a
+  release. The bump is **patch** by default; add a **`release:minor`** or
+  **`release:major`** label to the PR for a bigger bump. (Closing a PR without
+  merging does nothing.)
+- **a `v*` tag is pushed** → publishes a release for that exact tag.
+- **run manually** (Actions → Release → Run workflow) → builds the bundles and
+  creates a **draft** release.
 
 ### Environment variables
 
@@ -112,6 +119,13 @@ When you click **Add selected to Mesh**, for each selected API the server:
    for REST sources.
 3. (Re)starts the GraphQL Mesh CLI (`mesh dev`) which serves the unified
    GraphQL API + GraphiQL on `MESH_PORT`.
+
+### Browsing the table
+
+The API table sorts by clicking column headers and has a **live filter box in
+each column header** (results update as you type). The **Namespace** box scopes
+the cluster query itself and is also live. The top bar shows a **live count of
+open port-forward connections** with a **Disconnect all** button.
 
 ### Per-service port-forwarding
 

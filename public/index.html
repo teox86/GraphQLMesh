@@ -15,8 +15,16 @@
           <p class="subtitle">Compose cluster REST &amp; GraphQL APIs into a local GraphQL Mesh</p>
         </div>
       </div>
-      <div id="cluster" class="cluster-pill" title="Cluster connection">
-        <span class="dot"></span><span id="cluster-text">connecting…</span>
+      <div class="topbar-right">
+        <div class="conn-box">
+          <span id="conn-pill" class="conn-pill" title="Active port-forward connections">
+            🔌 <strong id="conn-count">0</strong>&nbsp;open
+          </span>
+          <button id="disconnect-all" class="btn btn-danger" disabled>Disconnect all</button>
+        </div>
+        <div id="cluster" class="cluster-pill" title="Cluster connection">
+          <span class="dot"></span><span id="cluster-text">connecting…</span>
+        </div>
       </div>
     </header>
 
@@ -27,7 +35,7 @@
           <div class="actions">
             <label class="filter">
               Namespace
-              <input id="namespace" type="text" placeholder="(all)" />
+              <input id="namespace" type="text" placeholder="(all namespaces)" autocomplete="off" />
             </label>
             <button id="refresh" class="btn">↻ Refresh</button>
           </div>
@@ -43,15 +51,25 @@
         <div class="table-wrap">
           <table id="api-table">
             <thead>
-              <tr>
+              <tr class="head-titles">
                 <th class="col-check"></th>
-                <th>API</th>
-                <th>Namespace</th>
-                <th>Type</th>
-                <th>Port</th>
+                <th class="sortable" data-sort="name">API <span class="arrow"></span></th>
+                <th class="sortable" data-sort="namespace">Namespace <span class="arrow"></span></th>
+                <th class="sortable" data-sort="type">Type <span class="arrow"></span></th>
+                <th class="sortable" data-sort="servicePort">Port <span class="arrow"></span></th>
                 <th>Endpoint path</th>
-                <th>Detected by</th>
+                <th class="sortable" data-sort="source">Detected by <span class="arrow"></span></th>
                 <th>Port-forward</th>
+              </tr>
+              <tr class="head-filters">
+                <th></th>
+                <th><input data-filter="name" type="text" placeholder="Filter API…" autocomplete="off" /></th>
+                <th><input data-filter="namespace" type="text" placeholder="Filter…" autocomplete="off" /></th>
+                <th><input data-filter="type" type="text" placeholder="Filter…" autocomplete="off" /></th>
+                <th><input data-filter="servicePort" type="text" placeholder="Filter…" autocomplete="off" /></th>
+                <th><input data-filter="path" type="text" placeholder="Filter…" autocomplete="off" /></th>
+                <th><input data-filter="source" type="text" placeholder="Filter…" autocomplete="off" /></th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="api-body">
